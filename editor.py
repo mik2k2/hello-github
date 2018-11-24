@@ -4,6 +4,7 @@ My first attempt of a tkinter app with "normal" surroundings.
 Current features:
     - syntax highlighting
     - insert blocks and special characters
+    - export highlighted syntax as HTML (with bugs)
 that's it."""
 
 import tkinter as tk
@@ -14,6 +15,8 @@ import os
 import sys
 import string
 import json
+import re
+import html
 
 MARKUP = {
     'keyword': ['if', 'while', 'and', 'or', 'return', 'else', 'elif', 'not', ],
@@ -112,6 +115,39 @@ class CodeText(tk.Text):
         set_title()
 
 
+def to_html(text):
+    text = text.join(['\x00']*2)
+    out = html.escape(text)
+    for k, color in COLORS.items():
+        for p in MARKUP[k]:
+            finds = re.findall(rf'\W{p}\W', text)
+            for repl in finds:
+                repl = html.escape(repl)
+                start = out.find(repl)
+                while start != -1:
+                    out = ''.join((out[:start], repl[0],
+                                   rf'<span style="color: {color};">{repl[1:-1]}</span>',
+                                   repl[-1], out[start+len(repl):]))
+                    start = out[start+len(repl)].find(repl)
+    return f'<pre><code style="font-weight: bold;">{out}</code></pre>'
+
+
+def export_as_html(e=None):
+    if file is None:
+        return tk_msg.showwarning('No file opened', "You haven't opened any file!")
+    filename = tk_fdia.asksaveasfilename(defaultextension='.html', default=file.split('.')[:-1])
+    if filename is None:
+        return
+    filename = os.path.sep.join(filename.split('/'))
+    with open(filename, 'w', encoding='UTF-8') as f:
+        f.write('<!DOCTYPE html><html><head>')
+        f.write('<meta charset="utf-8"><title>')
+        f.write(file)
+        f.write('</title></head><body>')
+        f.write(to_html(textbox.get(0.0, 'end')))
+        f.write('</body></html>')
+    tk_msg.showinfo('Saved file', 'The file has successfully been exported and saved')
+
 def save_file():
     if file is not None:
         with open(file, 'w', encoding='UTF-8') as f:
@@ -123,7 +159,8 @@ def save_file():
 
 def save_file_as():
     global file
-    f = tk_fdia.asksaveasfilename(filetypes=(('PSEUDO files', '.pseudo'),), defaultextension='.pesudo').replace('/', '\\')
+    f = os.path.sep.join(
+        tk_fdia.asksaveasfilename(filetypes=(('PSEUDO files', '.pseudo'),), defaultextension='.pesudo').split('/'))
     if not f:
         return
     file = f
@@ -159,7 +196,7 @@ def set_title():
 
 def on_close():
     if textbox.had_edit:
-        save =  tk_msg.askyesnocancel('Save on exit?', 'Should the file be saved before exiting?')
+        save = tk_msg.askyesnocancel('Save on exit?', 'Should the file be saved before exiting?')
         if save is None:
             return
         if save:
@@ -186,6 +223,7 @@ menu.add_command(label='New', command=new_file, underline=0)
 menu.add_command(label='Open', command=open_file, underline=0)
 menu.add_command(label='Save  Ctrl-S', command=save_file, underline=0)
 menu.add_command(label='Save As', command=save_file_as, underline=5)
+menu.add_command(label='Export as HTML', command=export_as_html, underline=0)
 menubar.add_cascade(label='File', menu=menu, underline=0, )
 menu = tk.Menu(menubar, tearoff=0)
 menu1 = tk.Menu(menu, tearoff=0)
