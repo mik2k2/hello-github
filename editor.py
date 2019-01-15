@@ -18,14 +18,16 @@ import json
 import re
 import html
 
+sys.stderr = open('error.log', 'a')
+sys.stderr.write('\n\nSTART\n\n')
+
 MARKUP = {
-    'keyword': ['if', 'while', 'and', 'or', 'return', 'else', 'elif', 'not', ],
-    'type': sum(([s, s.upper()] for s in
-                 ('int', 'integer', 'boolean', 'float', 'real', 'bool',
-                  'void', 'str', 'string')), []),
-    'header': ['FUNC', 'PARAMS', 'VARS', 'CODE', 'RETURN', '#\\w+', ],
-    'builtin': ['write', 'read', 'random', 'true', 'false', ],
-    'string': ['".*?"', ],
+    'keyword': ['if', 'while', 'and', 'or', 'return', 'else',
+                'not', 'for', 'to', 'from', 'step'],
+    'type': ['int', 'float', 'real', 'bool', 'str',],
+    'header': ['def', 'vars','@[a-z]+', ],
+    'builtin': ['write', 'read', 'true', 'false', 'random'],
+    'string': [r'"(.*?[^\\])*?"', ],
     'comment': ['//.*?\n', ],
 }
 COLORS = {
@@ -42,7 +44,12 @@ try:
 except FileNotFoundError:
     pass
 else:
-    add = json.load(f)
+    try:
+        add = json.load(f)
+    except json.JSONDecodeError as e:
+        tk_msg.showerror('JSON config',
+                         'Error while reading editor_config.json:\n'+str(e))
+        add = {}
     for k, v in add.items():
         if k in MARKUP:
             MARKUP[k].extend(v)
@@ -50,6 +57,9 @@ else:
         for v in add['package']:
             MARKUP['builtin'].append(v+r'\.\w+')
     f.close()
+
+for v in MARKUP.values():
+    v.extend(x.upper() for x in v.copy())
 
 
 class CodeText(tk.Text):
@@ -105,7 +115,7 @@ class CodeText(tk.Text):
             start = self.search(pattern, end, 'end', count=count, regexp=regexp)
             if start == '' or count.get() == 0:
                 return
-            end = f'{start}+{count.get()-1}c'
+            end = '%s+%sc' % (start, count.get()-1)
             if self.get('{}-1c'.format(start), start) not in string.ascii_letters or start == '1.0':
                 self.tag_add(tag, start, end)
 
@@ -120,16 +130,16 @@ def to_html(text):
     out = html.escape(text)
     for k, color in COLORS.items():
         for p in MARKUP[k]:
-            finds = re.findall(rf'\W{p}\W', text)
+            finds = re.findall(r'\W%s\W' % (p,), text)
             for repl in finds:
                 repl = html.escape(repl)
                 start = out.find(repl)
                 while start != -1:
                     out = ''.join((out[:start], repl[0],
-                                   rf'<span style="color: {color};">{repl[1:-1]}</span>',
+                                   r'<span style="color: %s;">%s</span>' % (color, repl[1:-1]),
                                    repl[-1], out[start+len(repl):]))
                     start = out[start+len(repl)].find(repl)
-    return f'<pre><code style="font-weight: bold;">{out}</code></pre>'
+    return '<pre><code style="font-weight: bold;">%s</code></pre>' % (out,)
 
 
 def export_as_html(e=None):
