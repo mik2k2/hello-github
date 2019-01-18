@@ -17,27 +17,30 @@ import string
 import json
 import re
 import html
+import time
+from collections import OrderedDict
 
 sys.stderr = open('error.log', 'a')
-sys.stderr.write('\n\nSTART\n\n')
 
 MARKUP = {
+    'comment': ['//.*?\n', ],
     'keyword': ['if', 'while', 'and', 'or', 'return', 'else',
                 'not', 'for', 'to', 'from', 'step'],
     'type': ['int', 'float', 'real', 'bool', 'str',],
-    'header': ['def', 'vars','@[a-z]+', ],
-    'builtin': ['write', 'read', 'true', 'false', 'random'],
+    'header': ['def', 'VARS', '@\\w+', ],
+    'builtin': ['write', 'read', 'true', 'false', 'random', 'sqrt'],
     'string': [r'"(.*?[^\\])*?"', ],
-    'comment': ['//.*?\n', ],
 }
-COLORS = {
+COLORS = OrderedDict({  # important for markup layers
+    'comment': 'grey',
     'keyword': 'orange',
     'type': 'purple',
     'header': 'red',
     'builtin': 'green',
     'string': 'lime',
-    'comment': 'grey',
-}
+})
+
+regex_unesc_quote_html = re.compile(r'[^\\]'+html.escape('"'))  # &quot; and &#34; and &#x27; possible
 
 try:
     f = open('editor_markup.json', encoding='UTF-8')
@@ -59,7 +62,9 @@ else:
     f.close()
 
 for v in MARKUP.values():
-    v.extend(x.upper() for x in v.copy())
+    for i, p in enumerate(v):
+        if not any(p.endswith(w) for w in list(string.whitespace)+['\\W']):
+            v[i] = p+'(\\W|\n)'  # last resort for including newlines (see https://tcl.tk/man/tcl8.5/TkCmd/text.htm#M120 and https://tcl.tk/man/tcl8.5/TclCmd/re_syntax.htm#M88)
 
 
 class CodeText(tk.Text):
@@ -103,16 +108,20 @@ class CodeText(tk.Text):
             self.markup()
 
     def markup(self, event=None):
+        self._markup_start = mks = time.time()
+        time.sleep(0.5)
+        if self._markup_start != mks:  # don't run everything during fast typing
+            return
         for tag, patterns in MARKUP.items():
             self.tag_remove(tag, '1.0', 'end')
             for pattern in patterns:
-                threading.Thread(target=self.markup_one, args=(pattern+'(\n|\\W)', tag)).start()
+                threading.Thread(target=self.markup_one, args=(pattern, tag)).start()
 
-    def markup_one(self, pattern, tag, regexp=True):
+    def markup_one(self, pattern, tag):
         end = '1.0'
         count = tk.IntVar()
         while True:
-            start = self.search(pattern, end, 'end', count=count, regexp=regexp)
+            start = self.search(pattern, end, 'end', count=count, regexp=True)
             if start == '' or count.get() == 0:
                 return
             end = '%s+%sc' % (start, count.get()-1)
@@ -130,31 +139,43 @@ def to_html(text):
     out = html.escape(text)
     for k, color in COLORS.items():
         for p in MARKUP[k]:
-            finds = re.findall(r'\W%s\W' % (p,), text)
-            for repl in finds:
-                repl = html.escape(repl)
-                start = out.find(repl)
-                while start != -1:
-                    out = ''.join((out[:start], repl[0],
-                                   r'<span style="color: %s;">%s</span>' % (color, repl[1:-1]),
-                                   repl[-1], out[start+len(repl):]))
-                    start = out[start+len(repl)].find(repl)
-    return '<pre><code style="font-weight: bold;">%s</code></pre>' % (out,)
+            regex = re.compile('\\W{}'.format(html.escape(p)))
+            current_position = 0
+            m = regex.search(out)
+            while m is not None:
+                start = m.start()+1+current_position
+                end = m.end()+current_position-1
+                print(m, current_position)
+                if not (len(regex_unesc_quote_html.findall(out[:start])) % 2  # inside a string
+                        and len(regex_unesc_quote_html.findall('\x00'+out[end:])) % 2):  # '\x00' to still capt. if we are at the end
+                    out = '{before}<span style="color: {color};">{inside}</span>{after}'.format(
+                        before=out[:start], color=color, inside=m.group()[1:-1], after=out[end:])
+                    current_position += 30+len(color)  # tag length
+                print()
+                current_position += m.end()
+                m = regex.search(out[current_position:])
+    return ('<pre><code style="font-weight: bold;">%s</code></pre>' % (out,)).replace('\x00', '')
 
 
 def export_as_html(e=None):
+    if None is tk_msg.askokcancel('Export as HTML', 'Please wait while we convert your file to HTML...'):
+        return
+    html = to_html(textbox.get(0.0, 'end'))
     if file is None:
-        return tk_msg.showwarning('No file opened', "You haven't opened any file!")
-    filename = tk_fdia.asksaveasfilename(defaultextension='.html', default=file.split('.')[:-1])
-    if filename is None:
+        cur_file = 'New File'
+    else:
+        cur_file = '{} - {}'.format(file.split(os.path.sep)[-1].rsplit('.', 1)[0], file)
+    filename = tk_fdia.asksaveasfilename(filetypes=(('HTML file', '.html'),),
+                                         defaultextension='.html', default=file.split('.')[:-1])
+    if not filename:
         return
     filename = os.path.sep.join(filename.split('/'))
     with open(filename, 'w', encoding='UTF-8') as f:
         f.write('<!DOCTYPE html><html><head>')
         f.write('<meta charset="utf-8"><title>')
-        f.write(file)
+        f.write(cur_file)
         f.write('</title></head><body>')
-        f.write(to_html(textbox.get(0.0, 'end')))
+        f.write(html)
         f.write('</body></html>')
     tk_msg.showinfo('Saved file', 'The file has successfully been exported and saved')
 
@@ -165,12 +186,12 @@ def save_file():
         textbox.had_edit = False
         set_title()
     else:
-        tk_msg.showwarning('No file opened.', 'Select Save As')
+        save_file_as()
 
 def save_file_as():
     global file
     f = os.path.sep.join(
-        tk_fdia.asksaveasfilename(filetypes=(('PSEUDO files', '.pseudo'),), defaultextension='.pesudo').split('/'))
+        tk_fdia.asksaveasfilename(filetypes=(('PSEUDO files', '.pseudo'),), defaultextension='.pseudo').split('/'))
     if not f:
         return
     file = f
