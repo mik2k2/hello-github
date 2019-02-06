@@ -263,7 +263,10 @@ menu1.add_command(label='≠ - unequals', command=insert(' ≠ '), underline=4)
 menu.add_cascade(label='Char/Sign', menu=menu1, underline=0)
 menu1 = tk.Menu(menu, tearoff=0)
 for head in MARKUP['header']:
-    menu1.add_command(label=head, command=insert(head+':'), underline=0)
+    menu1.add_command(label=head,
+                      command=insert((head[:-6] if head.endswith('(\\W|\n)')
+                                      else head) + ':'),
+                      underline=0)
 menu.add_cascade(label='header', menu=menu1, underline=0)
 menubar.add_cascade(label='Insert', menu=menu, underline=0)
 
