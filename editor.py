@@ -13,6 +13,7 @@ import tkinter.filedialog as tk_fdia
 import threading
 import os
 import sys
+import subprocess
 import string
 import json
 import re
@@ -79,6 +80,7 @@ class CodeText(tk.Text):
         self.bind('<Shift-Tab>', self._undo_tab)
         self.bind('<Return>', self._enter)
         self.bind('<Key>', self.keypress)
+        self.markup_timer()
 
     def _tab(self, event):
         self.keypress()
@@ -101,17 +103,18 @@ class CodeText(tk.Text):
         return 'break'
 
     def keypress(self, event=None):
-        if event is None or event.keysym.lower() in list(string.ascii_letters)+'tab backspace " ) ( space'.split():
+        if event is None or event.keysym.lower() in string.printable:
             if not self.had_edit:
                 self.had_edit = True
                 set_title()
+
+    def markup_timer(self):
+        if self.had_edit:
+            self.had_edit = False
             self.markup()
+        self.after(300, self.markup_timer)
 
     def markup(self, event=None):
-        self._markup_start = mks = time.time()
-        time.sleep(0.5)
-        if self._markup_start != mks:  # don't run everything during fast typing
-            return
         for tag, patterns in MARKUP.items():
             self.tag_remove(tag, '1.0', 'end')
             for pattern in patterns:
@@ -173,11 +176,20 @@ def export_as_html(e=None):
     with open(filename, 'w', encoding='UTF-8') as f:
         f.write('<!DOCTYPE html><html><head>')
         f.write('<meta charset="utf-8"><title>')
-        f.write(cur_file)
+        f.write(html.escape(cur_file))
         f.write('</title></head><body>')
         f.write(html)
         f.write('</body></html>')
-    tk_msg.showinfo('Saved file', 'The file has successfully been exported and saved')
+    if tk_msg.askyesno('Saved file',
+                       'The file has successfully been exported and saved.'
+                       'Do you want to open it?'):
+        if hasattr(os, 'startfile'):
+            os.startfile(filename)
+        else:
+            try:
+                subprocess.Popen(['xdg-open', filename])
+            except FileNotFoundError:
+                tk_msg.showerror('Error', "We couldn't open the file.")
 
 def save_file():
     if file is not None:
@@ -263,7 +275,7 @@ menu1.add_command(label='≠ - unequals', command=insert(' ≠ '), underline=4)
 menu.add_cascade(label='Char/Sign', menu=menu1, underline=0)
 menu1 = tk.Menu(menu, tearoff=0)
 for head in MARKUP['header']:
-    menu1.add_command(label=head,
+    menu1.add_command(label=(head[:-6] if head.endswith('(\\W|\n)') else head),
                       command=insert((head[:-6] if head.endswith('(\\W|\n)')
                                       else head) + ':'),
                       underline=0)
