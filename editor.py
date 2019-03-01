@@ -27,10 +27,12 @@ MARKUP = {
     'comment': ['//.*?\n', ],
     'keyword': ['if', 'while', 'and', 'or', 'return', 'else',
                 'not', 'for', 'to', 'from', 'step'],
-    'type': ['int', 'float', 'real', 'bool', 'str',],
-    'header': ['def', 'VARS', '@\\w+', ],
-    'builtin': ['write', 'read', 'true', 'false', 'random', 'sqrt'],
+    'type': ['int', 'float', 'real', 'bool', 'str', 'array', 'map',
+             'basenumber'],
+    'header': ['type', 'def', 'VARS', '@(\\W|mod )?\\w+\\W?', ],
+    'builtin': ['write', 'read', 'true', 'false', 'inf', ],
     'string': [r'"(.*?[^\\])*?"', ],
+    'package': ['math']
 }
 COLORS = OrderedDict({  # important for markup layers
     'comment': 'grey',
@@ -57,19 +59,22 @@ else:
     for k, v in add.items():
         if k in MARKUP:
             MARKUP[k].extend(v)
-    if 'package' in add:
-        for v in add['package']:
+    if 'package' in MARKUP:
+        for v in MARKUP['package']:
             MARKUP['builtin'].append(v+r'\.\w+')
+    del MARKUP['package']
     f.close()
 
 for v in MARKUP.values():
     for i, p in enumerate(v):
         if not any(p.endswith(w) for w in list(string.whitespace)+['\\W']):
-            v[i] = p+'(\\W|\n)'  # last resort for including newlines (see https://tcl.tk/man/tcl8.5/TkCmd/text.htm#M120 and https://tcl.tk/man/tcl8.5/TclCmd/re_syntax.htm#M88)
+            p += '(\\W|\n)'  # last resort for including newlines (see https://tcl.tk/man/tcl8.5/TkCmd/text.htm#M120 and https://tcl.tk/man/tcl8.5/TclCmd/re_syntax.htm#M88)
+        v[i] = p
 
 
 class CodeText(tk.Text):
     TAB = ' '*4
+    VALID_KEYS = ('BackSpace', 'Delete')
 
     def __init__(self, master=None, *args, **kwargs):
         super().__init__(master, *args, undo=True, **kwargs)
@@ -103,7 +108,9 @@ class CodeText(tk.Text):
         return 'break'
 
     def keypress(self, event=None):
-        if event is None or event.keysym.lower() in string.printable:
+        if (event is None
+                or '' != event.char in string.printable
+                or event.keysym in self.VALID_KEYS):
             if not self.had_edit:
                 self.had_edit = True
                 set_title()
@@ -112,7 +119,7 @@ class CodeText(tk.Text):
         if self.had_edit:
             self.had_edit = False
             self.markup()
-        self.after(300, self.markup_timer)
+        self.after(100, self.markup_timer)
 
     def markup(self, event=None):
         for tag, patterns in MARKUP.items():
@@ -128,7 +135,7 @@ class CodeText(tk.Text):
             if start == '' or count.get() == 0:
                 return
             end = '%s+%sc' % (start, count.get()-1)
-            if self.get('{}-1c'.format(start), start) not in string.ascii_letters or start == '1.0':
+            if self.get('{}-1c'.format(start), start) not in '_'+string.ascii_letters or start == '1.0':
                 self.tag_add(tag, start, end)
 
     def reset(self):
@@ -142,7 +149,7 @@ def to_html(text):
     out = html.escape(text)
     for k, color in COLORS.items():
         for p in MARKUP[k]:
-            regex = re.compile('\\W{}'.format(html.escape(p)))
+            regex = re.compile(html.escape(p))
             current_position = 0
             m = regex.search(out)
             while m is not None:
@@ -275,9 +282,10 @@ menu1.add_command(label='≠ - unequals', command=insert(' ≠ '), underline=4)
 menu.add_cascade(label='Char/Sign', menu=menu1, underline=0)
 menu1 = tk.Menu(menu, tearoff=0)
 for head in MARKUP['header']:
-    menu1.add_command(label=(head[:-6] if head.endswith('(\\W|\n)') else head),
-                      command=insert((head[:-6] if head.endswith('(\\W|\n)')
-                                      else head) + ':'),
+    if head.endswith('(\\W|\n)'):
+        head = head[:-6]
+    menu1.add_command(label=head,
+                      command=insert(head + ':'),
                       underline=0)
 menu.add_cascade(label='header', menu=menu1, underline=0)
 menubar.add_cascade(label='Insert', menu=menu, underline=0)
