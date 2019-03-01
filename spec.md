@@ -1,4 +1,5 @@
 
+
 Pseudocode Specification
 ========================
 
@@ -12,6 +13,7 @@ Code notations
 - if there is a choice of content, the possibilities will be enclosed in ``|pipes|`` (_not_ indicating optionality) separated by the ``tilde~sign``
 - ... is used to display repetitive options
 - the arrow used, ⬅, is U+11013
+- numbers in repetitive options will be dispayed with a question mark
 
 Basic Construction
 ------------------
@@ -47,13 +49,14 @@ Literal Values
     - it has no type and is accessible through the builtin constant ``void``
 - a _map_
     - it maps a key to a value
-    - its type is `` map[`no`: `key type` ⬅ `value type`] ``, where `` `no` `` is the number of keys and values, `` `key type` `` id the type of the keys and `` `value type` `` is the values' type. The base class is ``map``
+    - its type is `` map[`no`: `key type` ⬅ `value type`] ``, where `` `no` `` is the number of keys and values (a literal or constant ``int``), `` `key type` `` is the type of the keys and `` `value type` `` is the values' type. The base class is ``map``
     - its literal representation is ``[`key 1`⬅`value 1`, ...]``
 - an _array_
     - it is a sized and ordered collection of elements of the same type
-    - its type is ``array[`no`, `type`]``, where `` `no` `` is the number (literal ``int``) of items and `` `type` `` is the type the items have. The base class is ``array``
+    - its type is ``array[`no1`, ..., `noN`, `type`]``, where `` `no?` `` are the numbers (literal or constant ``int``) of items in each nesting level and `` `type` `` is the type the items in the last nesting level have have. The base class is ``array``
+    - Note the same array type may be written in different ways, e.g. ``array[2, array[2, int]]`` is the same as ``array[2, 2, int]``, although the latter is preferred for ease of reading and typing
     - its literal presentation is ``[`value 1`, ...]``
-    - the literal repreentation may contain less values than the array declaration. The unfilled values are set to ``void``.
+    - the literal representation may contain less values than the array declaration. The unfilled values are set to ``void``.
     
 Directives
 ----------
@@ -61,9 +64,9 @@ Directives
 Directives provide structure and meanings to the language. Statements must, if not indicated otherwise and they include multiple sub-statements, begin on a following line and be indented.
 
 - declaration directive
-    - `` `identifier`: `type` ``
-    - (re)create a new identifier `` `identifier` `` that may contain values of type `` `type` ``
-    - if `` `type` `` has an argument-less constructor, assign its evaluation to he newly created identifier. Otherwse, its value will be ``void`` until assigned.
+    - `` `identifier1`, ..., `identfierN`: `type` ``
+    - (re)create new identifiers `` `identifier1` `` to `` `identifierN` `` that may contain values of type `` `type` ``
+    - if `` `type` `` has an argument-less constructor, assign its evaluation to the newly created identifiers. Otherwse, their values will be ``void`` until assigned.
     - this directive may only be used inside a scope directive (see below)
 - assignment directive
     - `` `identifier`⬅`value` ``
@@ -71,7 +74,6 @@ Directives provide structure and meanings to the language. Statements must, if n
 - constant directive
     - `` `identifier` := `type`: `constan value` ``
     - create a new identifier for the given type and assign `` `constant value` `` to it.
-    - the constant directive may only be included inside a scope directive
     - block all declaration attempts (through constant directive or declaration directive) of the identifier in lower scopes
     - this directive may only be used inside a scope directive (see below)
 - if-directive
@@ -83,19 +85,19 @@ Directives provide structure and meanings to the language. Statements must, if n
     - `` `condition` `` is checked _before_ each execution
 - for-directive
     - ``for `identifier` |from `initial`| to `condition` |step `step`|: `statement` ``
-    - set `` `identifier` `` to `` `initial` `` if given, else to ``0`` (Note: if it is not declared as ``int``, ommiting `` `initial` `` is illegal)
-    - execute `` `statement` `` as long as `` `identifier` <     `condition` `` if `` `condition` `` is instance of ``basenumber``, otherwise as long as `` `condition` `` evaluates to ``true``. This check is performed _before_ every eecution
+    - set `` `identifier` `` to `` `initial` `` if given, else to ``0`` (Note: if the identifier is not declared as ``int``, ommiting `` `initial` `` is illegal)
+    - execute `` `statement` `` as long as `` `identifier` <     `condition` `` if `` `condition` `` is instance of ``basenumber``, otherwise as long as `` `condition` `` evaluates to ``true``. This check is performed _before_ every execution
     - perform the following action on `` `identifier` `` _after_ each execution of `` `statement` ``:
         - increment by ``1`` if `` `step` `` is not set
         - perform `` `identifier` ⬅ `identifier` + `step` `` if `` `step` `` is an expression
         - execute `` `step` `` if it is a statement. It may not contain other statements.
 - definition directive
-    - ``def `identifier`(`arg1`: `arg type 1`|@|ref~val||, ...)| -> `return type`|: `statement` ``
+    - ``def `identifier`(`arg1`: `arg type 1`|@|ref~val||, ..., `argN`: `arg type N`|@|ref~val||)| -> `return type`|: `statement` ``
     - define a function (if `` `return type` `` is set) or a procedure (otherwise) with the given identifier and prevent future definitions with equal name, argument numbers, types and order and return type
-    - passage of arguments is as follows:
-        - if ``@ref`` is added to a `` `arg type n` ``, the passage is "by reference", i.e. all modifications (including reassignment) to the formal parameter are reflected in the acutal parameter. This is useful for "returnig" multiple values
-        - if ``@val`` is added to a `` `arg type n` ``, the passage is "by value", i.e the value is entirely copied and no changes will be reflected. 
-        - if no suffix is added, the passage is by value of a reference. This means thatt changes to the object (e.g. attribute modifications) are reflected,reassignment is not.
+    - passage of arguments is as follows
+        - if ``@ref`` is added to a `` `arg type ?` ``, the passage is "by reference", i.e. all modifications (including reassignment) to the formal parameter are reflected in the acutal parameter. This is useful for "returnig" multiple values
+        - if ``@val`` is added to a `` `arg type ?` ``, the passage is "by value", i.e the value is entirely copied and no changes will be reflected. 
+        - if no suffix is added, the passage is by value of a reference. This means that changes to the object (e.g. attribute modifications) are reflected, reassignment is not.
 - return directive
     - ``return `expression` ``
     - evaluate `` `expression` `` and return the value as result of the containing function. It immediately exits the function.
@@ -106,10 +108,22 @@ Directives provide structure and meanings to the language. Statements must, if n
     - Seen "User-defined types (classes)" for more information
 - Scope directive
     - ``VARS: `statement` ``
-    - `` `statement` `` may consist only of definition and constant directives
+    - `` `statement` `` may consist only of definition, alias and constant directives
     - this defines a new scope for the file, function, method or procedure, or, for types, their instances.
     - identifier lookups are performed from inner- to outermost scope
-    - a scope directive may "shadow" outer identifiers, if these are neither constents nor types or file-level functions or procedures
+    - a scope directive may "shadow" outer identifiers, if these are neither constents nor types or outer-level functions or procedures
+- Import directive
+    - ``@import `library`| to `identifier`|``
+    - This directive must be included in a file before any other code if used
+    - If `` `library` `` is a valid identifier, bind the library `` `library` `` from the standard libraries to `` `identifier` `` if specified, else to ``library``
+    - If `` `library` `` is a string constant, import the .pseudo file following the path in `` `library` `` (if relative, to the directory containing the current file) as a library and bind it to `` `identifier ` `` which must be given in this case
+    - Disallow all future declarations of the identifier to which the library is bound
+    - Library elements are looked up as attributes (see operators)
+- alias directive:
+    - ``@alias `name` = `value` ``
+    - create a new valid identifier `` `name` `` that holds the type `` `value` ``
+    - it may only be used in a file-level scope directive
+    - this is especially useful when dealing regularly with a complex type
 
 Operators
 ---------
@@ -156,8 +170,10 @@ They are defined as normal functions or procedures, but they are passed an impli
 
 Additionally to these methods, operators may be overloaded with methods as ``|`rval`|@`operator`other|@deffor `type`|`` (for operators on the left side of the instance) and ``|`rval`|@other`operator`|@deffor`type`|`` (for operators on the right side of the instance), where `` `operator` `` is an operator. 
 
-When an operator is used on an instance, the corresponding function is called. There is no guarantee regarding which function is called, i.e. `` `a` `operator` `b` `` may call `` @`operator`other `` of `` `a` `` or `` @other`operator` `` of `` `b` `` if both are appropriately defined.  It is passed the other value as other and the instance as self. If the operator is used without other value, other is void. 
+When an operator is used on an instance, the corresponding function is called. There is no guarantee regarding which function is called, i.e. `` `a` `operator` `b` `` may call `` @`operator`other `` of `` `a` `` or `` @other`operator` `` of `` `b` `` if both are appropriately defined. However, only one must be defined for the operation to be legal and will be called if the only one It is passed the other value as other and the instance as self. If the operator is used without other value, other is void. 
 
 `` `type` `` may be a type, __also one that is not yet defined__. It defines the type the operation with the class is defined for and may be ``void`` to indicate the method should be called without other value, i.e. the method will be called with other being instance of `` `type` ``. Multiple operator overrides may be defined with different `` `type` ``.  If no ``type`` is given, the method is used as a catch-all if no method with a matching type is otherwise found, but only when an other value is actually present (not ``void``).
+
+If a special (overloading) method requests one of the types ``str``, ``int``, ``real`` or ``bool`` as argument and the operation is used with 
 
 If `` `rval` `` is given, it is the value returned. If not provided, it is implicitly the containing type; the return self is also executed implicitly. Operations must return a value. Note: comparisons (``= > < >= <=``) will often return ``bool``. This has the be set as `` `rval` ``.
