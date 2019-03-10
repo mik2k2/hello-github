@@ -110,10 +110,10 @@ class CodeText(tk.Text):
     def keypress(self, event=None):
         if (event is None
                 or '' != event.char in string.printable
-                or event.keysym in self.VALID_KEYS):
-            if not self.had_edit:
-                self.had_edit = True
-                set_title()
+                or event.keysym in self.VALID_KEYS
+                ) and not self.had_edit:
+            self.had_edit = True
+            set_title()
 
     def markup_timer(self):
         if self.had_edit:
@@ -149,19 +149,17 @@ def to_html(text):
     out = html.escape(text)
     for k, color in COLORS.items():
         for p in MARKUP[k]:
-            regex = re.compile(html.escape(p))
+            regex = re.compile('\\W'+html.escape(p))
             current_position = 0
             m = regex.search(out)
             while m is not None:
                 start = m.start()+1+current_position
                 end = m.end()+current_position-1
-                print(m, current_position)
                 if not (len(regex_unesc_quote_html.findall(out[:start])) % 2  # inside a string
                         and len(regex_unesc_quote_html.findall('\x00'+out[end:])) % 2):  # '\x00' to still capt. if we are at the end
                     out = '{before}<span style="color: {color};">{inside}</span>{after}'.format(
                         before=out[:start], color=color, inside=m.group()[1:-1], after=out[end:])
                     current_position += 30+len(color)  # tag length
-                print()
                 current_position += m.end()
                 m = regex.search(out[current_position:])
     return ('<pre><code style="font-weight: bold;">%s</code></pre>' % (out,)).replace('\x00', '')
@@ -170,7 +168,7 @@ def to_html(text):
 def export_as_html(e=None):
     if None is tk_msg.askokcancel('Export as HTML', 'Please wait while we convert your file to HTML...'):
         return
-    html = to_html(textbox.get(0.0, 'end'))
+    markedup = to_html(textbox.get(0.0, 'end'))
     if file is None:
         cur_file = 'New File'
     else:
@@ -185,7 +183,7 @@ def export_as_html(e=None):
         f.write('<meta charset="utf-8"><title>')
         f.write(html.escape(cur_file))
         f.write('</title></head><body>')
-        f.write(html)
+        f.write(markedup)
         f.write('</body></html>')
     if tk_msg.askyesno('Saved file',
                        'The file has successfully been exported and saved.'
